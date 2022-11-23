@@ -3,7 +3,7 @@ import recast from 'recast'
 import astTypes from 'ast-types'
 import fs from 'fs/promises'
 import { parse } from 'acorn'
-import dedent from './dedent.js'
+import normalize from './dedent.js'
 
 export default function({ dedent = true, algorithm = 'md5', tags, filter = /\.js/, output }) {
   return {
@@ -36,6 +36,7 @@ export default function({ dedent = true, algorithm = 'md5', tags, filter = /\.js
         astTypes.visit(ast, {
           visitTaggedTemplateExpression(path) {
             const n = path.node
+                , loc = n.loc
 
             if (!tags.includes(n.tag.name)) return this.traverse(path)
 
@@ -45,7 +46,10 @@ export default function({ dedent = true, algorithm = 'md5', tags, filter = /\.js
                 type: 'Literal',
                 value: add(
                   n.tag.name,
-                  n.quasi.quasis.map((x) => x.value.cooked)
+                  n.quasi.quasis.map((x) => x.value.cooked),
+                  args.path,
+                  loc.start,
+                  loc.end
                 )
               },
               ...n.quasi.expressions
@@ -62,13 +66,13 @@ export default function({ dedent = true, algorithm = 'md5', tags, filter = /\.js
         }
       })
 
-      function add(tag, query) {
-        const hash = crypto.createHash(algorithm).update()
-        const dedented = dedent(query)
+      function add(tag, query, file, start, end) {
+        const hash = crypto.createHash(algorithm)
+        const dedented = dedent ? normalize(query) : query
         dedented.forEach(x => hash.update(x))
         const checksum = hash.digest('hex')
         tag in queries === false && (queries[tag] = {})
-        queries[tag][checksum] = query
+        queries[tag][checksum] = { query, file, start, end }
         return checksum
       }
     }

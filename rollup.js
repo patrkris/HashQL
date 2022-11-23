@@ -3,6 +3,7 @@ import recast from 'recast'
 import astTypes from 'ast-types'
 import util from '@rollup/pluginutils'
 import acorn from 'acorn'
+import normalize from './dedent.js'
 
 export default ({
   tags,
@@ -40,6 +41,7 @@ export default ({
       astTypes.visit(ast, {
         visitTaggedTemplateExpression(path) {
           const n = path.node
+              , loc = n.loc
 
           if (!tags.includes(n.tag.name))
             return this.traverse(path)
@@ -48,7 +50,13 @@ export default ({
           n.arguments = [
             {
               type: 'Literal',
-              value: add(n.tag.name, n.quasi.quasis.map(x => x.value.cooked))
+              value: add(
+                n.tag.name,
+                n.quasi.quasis.map(x => x.value.cooked),
+                id,
+                loc.start,
+                loc.end
+              )
             },
             ...n.quasi.expressions
           ]
@@ -62,13 +70,13 @@ export default ({
     buildEnd: () => output(queries)
   }
 
-  function add(tag, query) {
-    const hash = crypto.createHash(algorithm).update()
-    const dedented = dedent(query)
+  function add(tag, query, file, start, end) {
+    const hash = crypto.createHash(algorithm)
+    const dedented = dedent ? normalize(query) : query
     dedented.forEach(x => hash.update(x))
     const checksum = hash.digest('hex')
     tag in queries === false && (queries[tag] = {})
-    queries[tag][checksum] = query
+    queries[tag][checksum] = { query, file, start, end }
     return checksum
   }
 }
