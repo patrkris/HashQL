@@ -12,11 +12,15 @@ export default function(queries, options, handlers) {
 
   return async function evaluate({ tag, hash, input }, context) {
     const query = await get(hash, tag)
+    let finish
 
     if (!query)
       throw Object.assign(new Error(hash + ' not found for ' + tag), { code: 'NOT_FOUND', status: 404 })
 
-    return Promise.resolve(
+    if (options.oneval) {
+      finish = await options.oneval({ tag, hash, input }, context)
+    }
+    const result = Promise.resolve(
       handlers[tag](
         Object.assign(query, { raw: query }),
         await Promise.all(input.map(x =>
@@ -27,5 +31,7 @@ export default function(queries, options, handlers) {
         context
       )
     )
+    finish && finish({ tag, hash, input }, context)
+    return result
   }
 }
